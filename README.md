@@ -1,1 +1,3 @@
-# fluid_simulation
+# Fluid simulation using Shallow Water Equation
+
+WIP!
