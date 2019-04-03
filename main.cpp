@@ -3,5 +3,5 @@
 int main()
 {
 	simulation::fluid_simulator fs;
-	return fs.simulate();
+	fs.simulate();
 }

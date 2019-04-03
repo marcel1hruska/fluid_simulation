@@ -5,7 +5,10 @@ find_package(OpenGL REQUIRED)
 
 set (CMAKE_CXX_STANDARD 17)
 
-file(COPY ${CMAKE_SOURCE_DIR}/shaders DESTINATION ${CMAKE_BINARY_DIR})
+configure_file(${CMAKE_SOURCE_DIR}/shaders/standard_vertex_shader.vs ${CMAKE_BINARY_DIR}/shaders COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/shaders/standard_fragment_shader.fs ${CMAKE_BINARY_DIR}/shaders COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/shaders/HUD_vertex_shader.vs ${CMAKE_BINARY_DIR}/shaders COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/shaders/HUD_fragment_shader.fs ${CMAKE_BINARY_DIR}/shaders COPYONLY)
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
@@ -24,6 +27,7 @@ add_executable(fluid_simulation
 	main.cpp 
 	utils/shader.cpp
 	utils/camera.cpp
+	utils/hud.cpp
 	fluid_simulator.cpp)
 
 add_dependencies(fluid_simulation glfw glew glm)
