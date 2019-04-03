@@ -24,7 +24,6 @@ namespace simulation
 	{
 		double pressure;
 		glm::vec2 velocity;
-		glm::vec2 accel;
 		glm::vec2 coords;
 	};
 
