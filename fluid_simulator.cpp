@@ -270,27 +270,25 @@ void simulation::fluid_simulator::recompute_grid_()
 
 void simulation::fluid_simulator::add_water_pressure_()
 {
-	//compute screen/camera coordinates to world
-	auto current = screen_to_world_();
-	//out of boundaries
-	if (current.x < -1 || current.x > 1 || current.y < -1 || current.y > 1)
-		return;
-	for (size_t x = 0; x < GRID_SIZE; x++)
+	vertex_info * min_vertex;
+	float min_distance = 100;
+	for (size_t x = 1; x < GRID_SIZE-1; x++)
 	{
-		for (size_t y = 0; y < GRID_SIZE; y++)
+		for (size_t y = 1; y < GRID_SIZE-1; y++)
 		{
-			//add pressure to vertex accordingly to the distance of the point hit
-			auto distance = sqrt(pow(current.x - vertices_[x][y].coords.x, 2) + pow(current.y - vertices_[x][y].coords.y, 2));
-			if (distance < 0.1)
-				vertices_[x][y].pressure += -cos(distance * (PI / (double)(GRID_SIZE * 4))) * 15.0;
+			//compute intersection of a ray from the centre of the camera with a parallel xz plane
+			vec2 intersection(c.pos_.x + c.front_.x * (-c.pos_.y / c.front_.y), c.pos_.z + c.front_.z * (-c.pos_.y / c.front_.y));
+			//out of bounds check
+			if (intersection.x < -1 || intersection.x > 1 || intersection.y > 1 || intersection.y < -1)
+				return;
+			auto current_distance = distance(intersection, vertices_[x][y].coords);
+			//find the closest vertex to the intersection
+			if (current_distance < min_distance)
+			{
+				min_vertex = &vertices_[x][y];
+				min_distance = current_distance;
+			}
 		}
 	}
-}
-
-glm::vec3 fluid_simulator::screen_to_world_() 
-{
-	//not working properly
-	auto camera_vector = c.pos_ + c.front_;
-	auto result = glm::vec4(camera_vector, 1.0f) * inverse(c.transform_matrix);
-	return glm::vec3(result);
+	min_vertex->pressure += -cos((PI / (double)(GRID_SIZE * 4))) * 30.0;
 }

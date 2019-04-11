@@ -63,8 +63,6 @@ namespace simulation
 		std::vector<unsigned int> indices_;
 		//add extra pressure on button click
 		void add_water_pressure_();
-		//transforms camera coordinate to world
-		glm::vec3 screen_to_world_();
 	};
 }
 #endif
