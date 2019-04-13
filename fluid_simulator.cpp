@@ -1,7 +1,6 @@
 #include "fluid_simulator.h"
 #include <iostream>
 
-
 using namespace simulation;
 using namespace glm;
 using namespace std;
@@ -12,13 +11,11 @@ void fluid_simulator::simulate()
 	if (!initialise_openGL_())
 		return;
 
-	create_vertices_();
-
-	adjust_grid_();
+	s.initialize();
 
 	initialise_buffers_();
 
-	c.initialise(glGetUniformLocation(shader_id_,"transform_matrix"), window_, &delta_time_);
+	c.initialise(glGetUniformLocation(shader_id_,"transform_matrix"), window_, PLANE_HEIGHT);
 
 	h.init_HUD();
 
@@ -34,23 +31,17 @@ void fluid_simulator::simulate()
 		delta_time_ = current_frame - last_frame_;
 		last_frame_ = current_frame;
 
-		c.reposition();
+		c.reposition(delta_time_);
 
 		glUseProgram(shader_id_);
 
-		double delta;
-		//check for too big deltas
-		while (delta_time_ > 0.f)
-		{
-			delta = delta_time_ > 0.01 ? 0.01 : delta_time_;
-			delta_time_ -= delta;
-
-			recompute_grid_();
-		}
+		//recompute advection and update unknowns
+		//time should be machine dependent?
+		s.recompute(0.01);
 
 		// Compute height of each vertex
-		adjust_grid_();
-
+		s.adjust_grid();
+		
 		draw_();
 		
 		//check for right mouse button -> add pressure to water on its position when pressed
@@ -64,12 +55,14 @@ void fluid_simulator::simulate()
 		}
 		else if (glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_RELEASE && right_button_pressed_)
 		{
-			add_water_pressure_();
+			s.add_water(c.get_pos(),c.get_dir());
 			right_button_pressed_ = false;
 		}
 		
 		glfwSwapBuffers(window_);
 		glfwPollEvents();
+
+		std::cout << "Total water mass: " << s.water_mass() << std::endl;
 	}
 
 	delete_buffers_();
@@ -143,7 +136,7 @@ void simulation::fluid_simulator::initialise_buffers_()
 	// a buffer for the indices
 	glGenBuffers(1, &element_id_);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_id_);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_.size() * sizeof(unsigned int), &indices_[0], GL_STATIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, s.indices().size() * sizeof(unsigned int), &s.indices()[0], GL_STATIC_DRAW);
 }
 
 void simulation::fluid_simulator::delete_buffers_()
@@ -163,132 +156,20 @@ void simulation::fluid_simulator::draw_()
 	// vertices
 	glEnableVertexAttribArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, vertex_id_);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertex_buffer_data_), vertex_buffer_data_, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(s.vertex_buffer()), s.vertex_buffer(), GL_DYNAMIC_DRAW);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 	// colors
 	glEnableVertexAttribArray(1);
 	glBindBuffer(GL_ARRAY_BUFFER, color_id_);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(color_buffer_data_), color_buffer_data_, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(s.color_buffer()), s.color_buffer(), GL_DYNAMIC_DRAW);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_id_);
 
 	// draw mesh
-	glDrawElements(GL_TRIANGLES, indices_.size(), GL_UNSIGNED_INT, (void*)0);
+	glDrawElements(GL_TRIANGLES, s.indices().size(), GL_UNSIGNED_INT, (void*)0);
 
 	glDisableVertexAttribArray(0);
 	glDisableVertexAttribArray(1);
-}
-
-void simulation::fluid_simulator::create_vertices_()
-{
-	size_t current_vertex;
-	// create vertex/color buffers and vertex info array
-	for (int y = 0; y < GRID_SIZE; y++)
-	{
-		for (int x = 0; x < GRID_SIZE; x++)
-		{
-			//3 array indices for one vertex - for each coordinate
-			current_vertex = 3 * (y * GRID_SIZE + x);
-
-			//initialize to -1 - 1
-			vertex_buffer_data_[current_vertex] = (GLfloat)(x - GRID_SIZE / 2) / (GLfloat)(GRID_SIZE / 2);
-			vertex_buffer_data_[current_vertex + 1] = 0;
-			vertex_buffer_data_[current_vertex + 2] = (GLfloat)(y - GRID_SIZE / 2) / (GLfloat)(GRID_SIZE / 2);
-
-			//initialize to light blue
-			color_buffer_data_[current_vertex] = color_buffer_data_[current_vertex + 1] = 0.5;
-			color_buffer_data_[current_vertex + 2] = 1.0;
-
-			//no pressure and velocity at the beginning
-			vertices_[x][y].pressure = 0.0;
-			vertices_[x][y].velocity = { 0.0,0.0 };
-			vertices_[x][y].coords = { vertex_buffer_data_[current_vertex],vertex_buffer_data_[current_vertex + 2] };
-		}
-	}
-
-	//create 2 triangles for each 4 points
-	for (size_t y = 0; y < GRID_SIZE - 1; y++)
-	{
-		for (size_t x = 0; x < GRID_SIZE - 1; x++)
-		{
-			//first triangle
-			indices_.push_back(y * GRID_SIZE + x);
-			indices_.push_back(y * GRID_SIZE + x + 1);
-			indices_.push_back((y + 1) * GRID_SIZE + (x+1));
-			//second triangle
-			indices_.push_back(y * GRID_SIZE + x);
-			indices_.push_back((y + 1)  * GRID_SIZE + x);
-			indices_.push_back((y + 1) * GRID_SIZE + (x + 1));
-		}
-	}
-}
-
-void simulation::fluid_simulator::adjust_grid_()
-{
-	size_t current_vertex;
-	//adjust z for pressure for each vertex
-	for (int y = 0; y < GRID_SIZE; y++)
-	{
-		for (int x = 0; x < GRID_SIZE; x++)
-		{
-			current_vertex = 3 * (y*GRID_SIZE + x);
-			//
-			vertex_buffer_data_[current_vertex + 1] = (float)(vertices_[x][y].pressure/50);
-			//color accouring to Z, the higher the water the lighter the color
-			color_buffer_data_[current_vertex] = color_buffer_data_[current_vertex + 1] = (vertex_buffer_data_[current_vertex + 1] + 0.1)*5;
-		}
-	}
-}
-
-void simulation::fluid_simulator::recompute_grid_()
-{
-	double step = delta_time_ * SPEED;
-
-	// recompute velocity
-	for (int x = 0; x < GRID_SIZE; x++)
-	{
-		int next = (x + 1) % GRID_SIZE;
-		for (int y = 0; y < GRID_SIZE; y++)
-		{
-			//velocity is difference of pressures
-			vertices_[x][y].velocity.x += (vertices_[x][y].pressure - vertices_[next][y].pressure) * step;
-			vertices_[y][x].velocity.y += (vertices_[y][x].pressure - vertices_[y][next].pressure) * step;
-		}
-	}
-
-	// new pressure from velocity
-	for (int x = 1; x < GRID_SIZE; x++)
-	{
-		for (int y = 1; y < GRID_SIZE; y++)
-		{
-			vertices_[x][y].pressure += (vertices_[x - 1][y].velocity.x - vertices_[x][y].velocity.x + vertices_[x][y - 1].velocity.y - vertices_[x][y].velocity.y) * step;
-		}
-	}
-}
-
-void simulation::fluid_simulator::add_water_pressure_()
-{
-	vertex_info * min_vertex;
-	float min_distance = 100;
-	for (size_t x = 1; x < GRID_SIZE-1; x++)
-	{
-		for (size_t y = 1; y < GRID_SIZE-1; y++)
-		{
-			//compute intersection of a ray from the centre of the camera with a parallel xz plane
-			vec2 intersection(c.pos_.x + c.front_.x * (-c.pos_.y / c.front_.y), c.pos_.z + c.front_.z * (-c.pos_.y / c.front_.y));
-			//out of bounds check
-			if (intersection.x < -1 || intersection.x > 1 || intersection.y > 1 || intersection.y < -1)
-				return;
-			auto current_distance = distance(intersection, vertices_[x][y].coords);
-			//find the closest vertex to the intersection
-			if (current_distance < min_distance)
-			{
-				min_vertex = &vertices_[x][y];
-				min_distance = current_distance;
-			}
-		}
-	}
-	min_vertex->pressure += -cos((PI / (double)(GRID_SIZE * 4))) * 30.0;
 }

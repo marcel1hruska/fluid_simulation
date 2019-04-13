@@ -20,27 +20,27 @@ namespace utils {
 	{
 	public:
 		camera() {}
-		void initialise(GLuint matrix_id, GLFWwindow* window, double * delta_time);
-		void reposition();
+		void initialise(GLuint matrix_id, GLFWwindow* window, int height);
+		void reposition(double delta);
 		GLuint matrix_id;
 		glm::mat4 transform_matrix;
-		glm::mat4 view;
-		glm::mat4 projection;
-		glm::vec3 pos_ = glm::vec3(0.0f, 3.0f, 5.0f);
-		glm::vec3 front_ = glm::vec3(0.0f, 0.0f, 1.0f);
+		glm::vec3 get_pos();
+		glm::vec3 get_dir();
 	private:
 		//mouse variables
 		double last_x_, last_y_, x_, y_;
 		float yaw_ = -90.0f;
 		float pitch_ = -30.0f;
-		//keyboard variables
-		double * delta_time_;
 		//camera variables
+		glm::mat4 view_;
+		glm::mat4 projection_;
+		glm::vec3 pos_;
+		glm::vec3 front_ = glm::vec3(0.0f, 0.0f, 1.0f);
 		const glm::vec3 up_ = glm::vec3(0.0f, 1.0f, 0.0f);
 		//window variables
 		GLFWwindow* window_;
 		void add_cursor_values_();
-		void add_keyboard_values_();
+		void add_keyboard_values_(double delta);
 	};
 }
 #endif

@@ -2,26 +2,36 @@
 
 using namespace utils;
 
-void utils::camera::initialise(GLuint matrix_id, GLFWwindow * window, double * delta_time)
+void utils::camera::initialise(GLuint matrix_id, GLFWwindow * window, int height)
 {
 	window_ = window;
-	delta_time_ = delta_time;
 	glfwSetCursorPos(window_, WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
 	last_x_ = x_ = WINDOW_WIDTH / 2;
 	last_y_ = y_ = WINDOW_HEIGHT / 2;
 	camera::matrix_id = matrix_id;
+	pos_ = glm::vec3(0.0f, height + 3.0f, 5.0f);
 }
 
-void camera::reposition()
+void camera::reposition(double delta)
 {
 	//add cursor values to the camera front
 	add_cursor_values_();
 	//add keyboard values to the camera position
-	add_keyboard_values_();
+	add_keyboard_values_(delta);
 	//compute final transform matrix
-	view = glm::lookAt(pos_, pos_ + front_, up_);
-	projection = glm::perspective(glm::radians(45.0f), WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100.0f);
-	transform_matrix = projection * view;
+	view_ = glm::lookAt(pos_, pos_ + front_, up_);
+	projection_ = glm::perspective(glm::radians(45.0f), WINDOW_WIDTH / (float)WINDOW_HEIGHT, 0.1f, 100.0f);
+	transform_matrix = projection_ * view_;
+}
+
+glm::vec3 utils::camera::get_pos()
+{
+	return pos_;
+}
+
+glm::vec3 utils::camera::get_dir()
+{
+	return front_;
 }
 
 void camera::add_cursor_values_()
@@ -47,10 +57,10 @@ void camera::add_cursor_values_()
 		sin(glm::radians(yaw_)) * cos(glm::radians(pitch_)) ));
 }
 
-void camera::add_keyboard_values_()
+void camera::add_keyboard_values_(double delta)
 {
 	//delta time/camera speed
-	float speed = KEYBOARD_SENSITIVITY * (*delta_time_);
+	float speed = KEYBOARD_SENSITIVITY * delta;
 
 	if (glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS)
 		pos_ += speed * front_;

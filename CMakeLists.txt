@@ -28,7 +28,8 @@ add_executable(fluid_simulation
 	utils/shader.cpp
 	utils/camera.cpp
 	utils/hud.cpp
-	fluid_simulator.cpp)
+	fluid_simulator.cpp
+	shallow_water_solver.cpp)
 
 add_dependencies(fluid_simulation glfw glew glm)
 
