@@ -9,7 +9,7 @@ void utils::camera::initialise(GLuint matrix_id, GLFWwindow * window, int height
 	last_x_ = x_ = WINDOW_WIDTH / 2;
 	last_y_ = y_ = WINDOW_HEIGHT / 2;
 	camera::matrix_id = matrix_id;
-	pos_ = glm::vec3(0.0f, height + 3.0f, 5.0f);
+	pos_ = glm::vec3(-1.0f, height + 3.0f, 3.0f);
 }
 
 void camera::reposition(double delta)

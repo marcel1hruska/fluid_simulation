@@ -5,57 +5,34 @@ using namespace glm;
 
 void simulation::swe_solver::initialize()
 {
-	create_vertices_();
-	adjust_grid();
-}
-
-void simulation::swe_solver::create_vertices_()
-{
-	size_t current_vertex;
-	// create vertex/color buffers and vertex info array
 	for (int y = 0; y < GRID_SIZE; y++)
 	{
 		for (int x = 0; x < GRID_SIZE; x++)
 		{
-			//3 array indices for one vertex - for each coordinate
-			current_vertex = 3 * (y * GRID_SIZE + x);
-
-			//initialize to (-1,1)
-			vertex_buffer_data_[current_vertex] = (GLfloat)(x - GRID_SIZE / 2) / (GLfloat)(GRID_SIZE / 2);
-			vertex_buffer_data_[current_vertex + 1] = 1;
-			vertex_buffer_data_[current_vertex + 2] = (GLfloat)(y - GRID_SIZE / 2) / (GLfloat)(GRID_SIZE / 2);
-
-			//initialize to light blue
-			color_buffer_data_[current_vertex] = color_buffer_data_[current_vertex + 1] = 0.5;
-			color_buffer_data_[current_vertex + 2] = 1.0;
-
-			//TODO start/HUD modes
-			/* 
 			//DAM BREAK
-			if (x < GRID_SIZE / 6 && y < GRID_SIZE / 6)
-				vertices_[x][y].height.water = PLANE_HEIGHT + 1;
+			if (x < GRID_SIZE / 4 && y < GRID_SIZE / 4)
+				vertices_[x][y].height.water = WATER_HEIGHT + 1;
 			else
-				vertices_[x][y].height.water = PLANE_HEIGHT;
-			*/
-			//TSUNAMI
+				vertices_[x][y].height.water = WATER_HEIGHT;
+			
 			//NORMAL
-			vertices_[x][y].height.water = PLANE_HEIGHT;
+			//vertices_[x][y].height.water = WATER_HEIGHT;
 
 			//TODO prerendered terrain e.g.
+			//TODO not working correctly, buggy, probably tracking of free surface is needed
 			/*
-			if (x < GRID_SIZE / 6 && y < GRID_SIZE / 6)
-				vertices_[x][y].height.terrain = 1;
+			if (x < GRID_SIZE / 4)
+				vertices_[x][y].height.terrain = TERRAIN_HEIGHT + 0.2;
 			else
-				vertices_[x][y].height.terrain = 0;
-			*/
-
+				vertices_[x][y].height.terrain = TERRAIN_HEIGHT;
+				*/
 			// constant 0 terrain height for now
-			vertices_[x][y].height.terrain = 0;
+			vertices_[x][y].height.terrain = TERRAIN_HEIGHT;
 			// 0 velocities at the beginning
 			velocity_x_[x][y] = 0.0;
 			velocity_y_[x][y] = 0.0;
 
-			vertices_[x][y].coords = { vertex_buffer_data_[current_vertex],vertex_buffer_data_[current_vertex + 2] };
+			vertices_[x][y].coords = { (GLfloat)(x - GRID_SIZE/2) / (GLfloat)(GRID_SIZE / 2),(GLfloat)(y - GRID_SIZE/2) / (GLfloat)(GRID_SIZE / 2) };
 		}
 	}
 
@@ -64,55 +41,20 @@ void simulation::swe_solver::create_vertices_()
 		velocity_x_[GRID_SIZE][x] = 0.0;
 		velocity_y_[x][GRID_SIZE] = 0.0;
 	}
-
-	//create 2 triangles for each 4 points
-	for (size_t y = 0; y < GRID_SIZE - 1; y++)
-	{
-		for (size_t x = 0; x < GRID_SIZE - 1; x++)
-		{
-			//first triangle
-			indices_.push_back(y * GRID_SIZE + x);
-			indices_.push_back(y * GRID_SIZE + x + 1);
-			indices_.push_back((y + 1) * GRID_SIZE + (x + 1));
-			//second triangle
-			indices_.push_back(y * GRID_SIZE + x);
-			indices_.push_back((y + 1)  * GRID_SIZE + x);
-			indices_.push_back((y + 1) * GRID_SIZE + (x + 1));
-		}
-	}
-}
-
-void simulation::swe_solver::adjust_grid()
-{
-	size_t current_vertex;
-	//adjust z for pressure for each vertex
-	for (int y = 0; y < GRID_SIZE; y++)
-	{
-		for (int x = 0; x < GRID_SIZE; x++)
-		{
-			current_vertex = 3 * (y*GRID_SIZE + x);
-			//total vertex height as a result of terrain height + water height
-			auto total_height = vertices_[x][y].height.water + vertices_[x][y].height.terrain;
-			vertex_buffer_data_[current_vertex + 1] = total_height;
-			//color accouring to Z, the higher the water the lighter the color
-			color_buffer_data_[current_vertex] = color_buffer_data_[current_vertex + 1] = (vertices_[x][y].height.water + 0.1 - PLANE_HEIGHT) * 5;
-		}
-	}
 }
 
 void simulation::swe_solver::recompute(double delta)
 {
-	delta_ = delta;
-
+	delta_ = delta/2;
 	//all advections use semi-lagrangian method
-	adv_height();
-	adv_x_velocity();
-	adv_y_velocity();
+	adv_height_();
+	adv_x_velocity_();
+	adv_y_velocity_();
 
-	update_height();
-	update_velocities();
+	update_height_();
+	update_velocities_();
 
-	boundary_conditions();
+	boundary_conditions_();
 }
 
 double simulation::swe_solver::interpolate_(double q11, double q21, double q12, double q22, float xc, float yc, float x, float y)
@@ -122,7 +64,7 @@ double simulation::swe_solver::interpolate_(double q11, double q21, double q12, 
 	return (yc + 1 - y)*r1 + (y - yc)*r2;
 }
 
-void swe_solver::adv_height() {
+void swe_solver::adv_height_() {
 	//make a copy
 	auto copy_vertices = vertices_;
 	for (size_t x = 1; x < GRID_SIZE - 1; ++x) {
@@ -136,7 +78,7 @@ void swe_solver::adv_height() {
 			double back_y = (y * step_ - velocity_y * delta_)/step_;
 
 			//move from boundaries
-			reflect_(back_x, back_y);
+			reflect_(back_x, back_y, GRID_SIZE - 1, GRID_SIZE - 1);
 
 			//put back on grid
 			size_t new_grid_x = back_x;
@@ -156,7 +98,7 @@ void swe_solver::adv_height() {
 	}
 }
 
-void swe_solver::adv_x_velocity() {
+void swe_solver::adv_x_velocity_() {
 	auto copy_velocity_x = velocity_x_;
 	for (size_t x = 1; x < GRID_SIZE; ++x) {
 		for (size_t y = 1; y < GRID_SIZE - 1; ++y) {
@@ -168,7 +110,7 @@ void swe_solver::adv_x_velocity() {
 			double back_x = (x * step_ - velocity_x * delta_) / step_;
 			double back_y = (y * step_ - velocity_y * delta_) / step_;
 
-			reflect_(back_x, back_y);
+			reflect_(back_x, back_y, GRID_SIZE, GRID_SIZE - 1);
 
 			size_t new_grid_x = back_x;
 			size_t new_grid_y = back_y;
@@ -186,7 +128,7 @@ void swe_solver::adv_x_velocity() {
 	}
 }
 
-void swe_solver::adv_y_velocity() {
+void swe_solver::adv_y_velocity_() {
 	auto copy_velocity_y = velocity_y_;
 	for (size_t x = 1; x < GRID_SIZE - 1; ++x) {
 		for (size_t y = 1; y < GRID_SIZE; ++y) {
@@ -196,7 +138,7 @@ void swe_solver::adv_y_velocity() {
 			double back_x = (x * step_ - velocity_x * delta_)/step_;
 			double back_y = (y * step_ - velocity_y * delta_)/step_;
 
-			reflect_(back_x, back_y);
+			reflect_(back_x, back_y, GRID_SIZE-1, GRID_SIZE);
 
 			size_t new_grid_x = back_x;
 			size_t new_grid_y = back_y;
@@ -214,7 +156,7 @@ void swe_solver::adv_y_velocity() {
 	}
 }
 
-void swe_solver::update_height() {
+void swe_solver::update_height_() {
 	for (size_t i = 1; i < GRID_SIZE - 1; ++i) {
 		for (size_t j = 1; j < GRID_SIZE - 1; ++j) {
 			//compute divergence
@@ -224,7 +166,7 @@ void swe_solver::update_height() {
 	}
 }
 
-void swe_solver::update_velocities() {
+void swe_solver::update_velocities_() {
 	for (size_t j = 1; j < GRID_SIZE - 1; ++j) {
 		for (size_t i = 1; i < GRID_SIZE - 1; ++i) {
 			if (j >= 2)
@@ -243,7 +185,8 @@ void swe_solver::update_velocities() {
 		}
 	}
 }
-void swe_solver::boundary_conditions() {
+
+void swe_solver::boundary_conditions_() {
 	//reflecting, TODO absorbing
 	//left
 	for (size_t y = 0; y < GRID_SIZE; ++y) {
@@ -271,10 +214,10 @@ void swe_solver::boundary_conditions() {
 	}
 }
 
-void simulation::swe_solver::reflect_(double & x, double & y)
+void simulation::swe_solver::reflect_(double & x, double & y, int bound_x, int bound_y)
 {
-	x = (x < 0) ? -x : (x > GRID_SIZE) ? GRID_SIZE - (x - GRID_SIZE) : x;
-	y = (y < 0) ? -y : (y > GRID_SIZE) ? GRID_SIZE - (y - GRID_SIZE) : y;
+	x = (x < 0) ? -x : (x > bound_x) ? (bound_x - (x - bound_x)) : x;
+	y = (y < 0) ? -y : (y > bound_y) ? (bound_y - (y - bound_y)) : y;
 }
 
 void simulation::swe_solver::add_water(vec3 pos, vec3 dir)
@@ -286,9 +229,9 @@ void simulation::swe_solver::add_water(vec3 pos, vec3 dir)
 		for (size_t y = 1; y < GRID_SIZE - 1; y++)
 		{
 			//compute intersection of a ray from the centre of the camera with a parallel xz plane
-			vec2 intersection(pos.x + dir.x * ((PLANE_HEIGHT-pos.y)/ dir.y), pos.z + dir.z * ((PLANE_HEIGHT -pos.y)/ dir.y));
-			//out of bounds check
-			if (intersection.x < -1 || intersection.x > 1 || intersection.y > 1 || intersection.y < -1)
+			vec2 intersection(pos.x + dir.x * ((vertices_[x][y].get_total_height() -pos.y)/ dir.y), pos.z + dir.z * ((vertices_[x][y].get_total_height() -pos.y)/ dir.y));
+			//out of bounds check 
+			if (intersection.x < -1 || intersection.x > 1 || intersection.y > 1 || intersection.y < -1) 
 				return;
 			auto current_distance = distance(intersection, vertices_[x][y].coords);
 			//find the closest vertex to the intersection
@@ -302,7 +245,7 @@ void simulation::swe_solver::add_water(vec3 pos, vec3 dir)
 	if (min_distance < FLT_MAX)
 	{
 		//radius of add circle
-		int radius = 4;
+		int radius = GRID_SIZE / 10;
 		for (int x = min_vertex.first - radius; x < min_vertex.first+ radius; x++)
 		{
 			for (int y = min_vertex.second - radius; y < min_vertex.second + radius; y++)
@@ -313,28 +256,11 @@ void simulation::swe_solver::add_water(vec3 pos, vec3 dir)
 				auto dist = distance(vec2(x,y), vec2(min_vertex.first,min_vertex.second));
 				if (dist < radius)
 				{
-					if (dist < 1)
-						dist = 1;
-					vertices_[x][y].height.water += 1 / dist;
+					vertices_[x][y].height.water += 0.01;
 				}
 			}
 		}
 	}
-}
-
-std::vector<unsigned int>& simulation::swe_solver::indices()
-{
-	return indices_;
-}
-
-grid_array & simulation::swe_solver::vertex_buffer()
-{
-	return vertex_buffer_data_;
-}
-
-grid_array & simulation::swe_solver::color_buffer()
-{
-	return color_buffer_data_;
 }
 
 float simulation::swe_solver::water_mass()
@@ -344,8 +270,18 @@ float simulation::swe_solver::water_mass()
 	{
 		for (size_t x = 0; x < GRID_SIZE; x++)
 		{
-			mass += vertices_[x][y].height.water - vertices_[x][y].height.terrain;
+			mass += vertices_[x][y].height.water;
 		}
 	}
 	return mass;
+}
+
+vertex_grid & simulation::swe_solver::get_vertices()
+{
+	return vertices_;
+}
+
+float simulation::vertex_info::get_total_height()
+{
+	return height.terrain + height.water;
 }
