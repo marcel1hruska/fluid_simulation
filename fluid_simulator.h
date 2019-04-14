@@ -43,6 +43,8 @@ namespace simulation
 		utils::hud h;
 		swe_solver s;
 		GLFWwindow * window_;
+		//run simulations
+		bool run_ = false;
 		//delta count
 		double delta_time_ = 0.0f;
 		double last_frame_ = 0.0f;

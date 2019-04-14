@@ -40,11 +40,18 @@ void fluid_simulator::simulate()
 
 		c.reposition(delta_time_);
 
-		//recompute advection and update unknowns
-		s.recompute(delta_time_);
+		//start simulation on space
+		if (glfwGetKey(window_, GLFW_KEY_SPACE) == GLFW_PRESS && !run_)
+			run_ = true;
 
-		// Compute height of each vertex
-		adjust_grid_();
+		if (run_)
+		{
+			//recompute advection and update unknowns
+			s.recompute(delta_time_);
+
+			// Compute height of each vertex
+			adjust_grid_();
+		}
 		
 		//draw meshes
 		draw_terrain_();
@@ -57,7 +64,8 @@ void fluid_simulator::simulate()
 		if (glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
 		{
 			h.draw_crosshair();
-			s.add_water(c.get_pos(), c.get_dir());
+			if (run_)
+				s.add_water(c.get_pos(), c.get_dir());
 		}
 		
 		glfwSwapBuffers(window_);
