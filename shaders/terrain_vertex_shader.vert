@@ -1,7 +1,7 @@
 #version 430 core
-
+#define GRID_SIZE 1024
 layout(location = 0) in vec3 position;
-layout(location = 2) uniform vec4 color;
+layout(location = 1) uniform vec4 color;
 
 // transform matrix
 uniform mat4 transform_matrix;

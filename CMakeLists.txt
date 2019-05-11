@@ -5,12 +5,14 @@ find_package(OpenGL REQUIRED)
 
 set (CMAKE_CXX_STANDARD 17)
 
-configure_file(${CMAKE_SOURCE_DIR}/shaders/water_vertex_shader.vs ${CMAKE_BINARY_DIR}/shaders/water_vertex_shader.vs COPYONLY)
-configure_file(${CMAKE_SOURCE_DIR}/shaders/water_fragment_shader.fs ${CMAKE_BINARY_DIR}/shaders/water_fragment_shader.fs COPYONLY)
-configure_file(${CMAKE_SOURCE_DIR}/shaders/HUD_vertex_shader.vs ${CMAKE_BINARY_DIR}/shaders/HUD_vertex_shader.vs COPYONLY)
-configure_file(${CMAKE_SOURCE_DIR}/shaders/HUD_fragment_shader.fs ${CMAKE_BINARY_DIR}/shaders/HUD_fragment_shader.fs COPYONLY)
-configure_file(${CMAKE_SOURCE_DIR}/shaders/terrain_vertex_shader.vs ${CMAKE_BINARY_DIR}/shaders/terrain_vertex_shader.vs COPYONLY)
-configure_file(${CMAKE_SOURCE_DIR}/shaders/terrain_fragment_shader.fs ${CMAKE_BINARY_DIR}/shaders/terrain_fragment_shader.fs COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/shaders/water_vertex_shader.vert ${CMAKE_BINARY_DIR}/shaders/water_vertex_shader.vert COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/shaders/water_fragment_shader.frag ${CMAKE_BINARY_DIR}/shaders/water_fragment_shader.frag COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/shaders/swe_compute_shader.comp ${CMAKE_BINARY_DIR}/shaders/swe_compute_shader.comp COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/shaders/HUD_vertex_shader.vert ${CMAKE_BINARY_DIR}/shaders/HUD_vertex_shader.vert COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/shaders/HUD_fragment_shader.frag ${CMAKE_BINARY_DIR}/shaders/HUD_fragment_shader.frag COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/shaders/terrain_vertex_shader.vert ${CMAKE_BINARY_DIR}/shaders/terrain_vertex_shader.vert COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/shaders/terrain_fragment_shader.frag ${CMAKE_BINARY_DIR}/shaders/terrain_fragment_shader.frag COPYONLY)
+
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 

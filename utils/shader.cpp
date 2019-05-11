@@ -50,6 +50,36 @@ namespace utils {
 		return program_id;
 	}
 
+	GLuint process_compute_shader(const std::string & compute_shader_path)
+	{
+		// initialize
+		GLuint compute_id = glCreateShader(GL_COMPUTE_SHADER);
+
+		if (read_and_compile(compute_shader_path,compute_id) == GL_FALSE)
+			return 0;
+
+		// link
+		GLuint program_id = glCreateProgram();
+		glAttachShader(program_id, compute_id);
+		glLinkProgram(program_id);
+
+		int length;
+		// Check the program
+		glGetProgramiv(program_id, GL_INFO_LOG_LENGTH, &length);
+		if (length > 0) {
+			char * info = new char[length + 1];
+			glGetShaderInfoLog(program_id, length, NULL, info);
+			cout << "Link info: " << info << endl;
+			delete[] info;
+		}
+
+		//remove
+		glDetachShader(program_id, compute_id);
+
+		glDeleteShader(compute_id);
+		return program_id;
+	}
+
 	GLint utils::read_and_compile(const std::string & shader_path, GLuint id)
 	{
 		stringstream code;

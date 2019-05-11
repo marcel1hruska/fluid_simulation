@@ -15,8 +15,8 @@ namespace utils
 	{
 	public:
 		void draw_crosshair();
-		void init_HUD();
-		void delete_HUD();
+		void initialize();
+		void destroy();
 	private:
 		GLuint buff_id_;
 		GLuint shader_id_;

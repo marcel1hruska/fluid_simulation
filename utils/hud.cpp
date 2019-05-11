@@ -24,13 +24,13 @@ void hud::draw_crosshair()
 	glDisableVertexAttribArray(0);
 }
 
-void hud::init_HUD()
+void hud::initialize()
 {
 	glGenBuffers(1, &buff_id_);
-	shader_id_ = process_shaders("shaders/HUD_vertex_shader.vs", "shaders/HUD_fragment_shader.fs");
+	shader_id_ = process_shaders("shaders/HUD_vertex_shader.vert", "shaders/HUD_fragment_shader.frag");
 }
 
-void utils::hud::delete_HUD()
+void utils::hud::destroy()
 {
 	glDeleteBuffers(1, &buff_id_);
 	glDeleteProgram(shader_id_);

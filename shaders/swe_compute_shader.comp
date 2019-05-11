@@ -1,0 +1,285 @@
+﻿#version 430 core
+
+#extension GL_ARB_compute_shader : enable
+#extension GL_ARB_shader_storage_buffer_object : enable
+
+#define GRID_SIZE 1024
+#define STEP 0.2
+#define GRAVITY 10
+#define CIRC_DIST sqrt((1/float(GRID_SIZE))*(1/float(GRID_SIZE)) + (1/float(GRID_SIZE))*(1/float(GRID_SIZE)))
+
+//staggered grid - height in the middle of the cell, velocities at the sides
+/*     
+	---↑vy-----
+	|         |
+	|    h    →vx
+	|         |
+	-----------
+*/
+
+//heights info
+layout(std430,binding=0) buffer h
+{
+	vec2 Heights[ ];
+};
+
+//velocities info
+layout(std430,binding=1) buffer v
+{
+	vec2 Velocities[ ];
+};
+
+//add water position + delta
+layout(std430,binding=2) buffer a
+{
+	vec4 Additional[ ];
+};
+
+layout( local_size_x = 32, local_size_y = 32, local_size_z = 1 ) in;
+
+uint x = gl_GlobalInvocationID.x;
+uint y = gl_GlobalInvocationID.y;
+
+//get element
+uint el(uint arrx = x, uint arry = y)
+{
+	return arrx + arry*GRID_SIZE;
+}
+
+float delta;
+
+float interpolate(float q11, float q21, float q12, float q22, float xc, float yc, float x, float y)
+{
+	float r1 = (xc + 1 - x)*q11 + (x - xc)*q21;
+	float r2 = (xc +1 - x)*q12 + (x - xc)*q22;
+	return (yc + 1 - y)*r1 + (y - yc)*r2;
+}
+
+vec2 reflect_(float x, float y, float bound_x, float bound_y)
+{
+	x = (x < 0) ? -x : (x > bound_x) ? (bound_x - (x - bound_x)) : x;
+	y = (y < 0) ? -y : (y > bound_y) ? (bound_y - (y - bound_y)) : y;
+	return vec2(x,y);
+}
+
+void adv_height() 
+{
+	if (x == 0 || x >= GRID_SIZE - 1 || y == 0 || y >= GRID_SIZE - 1)
+		return;
+
+	//average of velocities to find x and y values on staggered grid
+	float velocity_x = (Velocities[el()].x + Velocities[el(x+1)].x)  / 2;
+	float velocity_y = (Velocities[el()].y + Velocities[el(x,y+1)].y) / 2;
+
+	//backtrace to the last grid point
+	//UNSTABLE
+	float back_x = (float(x) * STEP - velocity_x * delta)/STEP;
+	float back_y = (float(y) * STEP - velocity_y * delta)/STEP;
+
+	//move from boundaries
+	vec2 xy = reflect_(back_x, back_y, GRID_SIZE - 1, GRID_SIZE - 1);
+
+	//put back on grid
+	uint new_grid_x = uint(xy.x);
+	uint new_grid_y = uint(xy.y);
+
+	//bilinear interpolation of the water Cells between found grid point and the vertices
+	Heights[el()].x = interpolate(
+		Heights[el(new_grid_x,new_grid_y)].x,
+		Heights[el(new_grid_x+1,new_grid_y)].x,
+		Heights[el(new_grid_x,new_grid_y+1)].x,
+		Heights[el(new_grid_x+1,new_grid_y+1)].x,
+		new_grid_x,
+		new_grid_y,
+		back_x,
+		back_y);
+
+}
+
+void adv_x_velocity() {
+	if (x == 0 || x >= GRID_SIZE || y == 0 || y >= GRID_SIZE - 1)
+		return;
+
+	float velocity_x = Velocities[el()].x;
+	//average neighbour y Cells
+	float velocity_y = (Velocities[el()].y + Velocities[el(x,y+1)].y + Velocities[el(x-1,y)].y + Velocities[(x - 1,y + 1)].y )/ 4;
+
+	//more or less same as height advection
+	float back_x = (float(x) * STEP - velocity_x * delta) / STEP;
+	float back_y = (float(y) * STEP - velocity_y * delta) / STEP;
+
+	//move from boundaries
+	vec2 xy = reflect_(back_x, back_y, GRID_SIZE, GRID_SIZE - 1);
+
+	//put back on grid
+	uint new_grid_x = uint(xy.x);
+	uint new_grid_y = uint(xy.y);
+
+	Velocities[el()].x = interpolate(
+		Velocities[el(new_grid_x,new_grid_y)].x,
+		Velocities[el(new_grid_x+1,new_grid_y)].x,
+		Velocities[el(new_grid_x,new_grid_y+1)].x,
+		Velocities[el(new_grid_x+1,new_grid_y+1)].x,
+		new_grid_x,
+		new_grid_y,
+		back_x,
+		back_y);
+}
+
+void adv_y_velocity() {
+	if (x == 0 || x >= GRID_SIZE -1 || y == 0 || y >= GRID_SIZE)
+		return;
+
+	float velocity_y = Velocities[el()].y;
+	float velocity_x = (Velocities[el()].x + Velocities[el(x+1,y)].x + Velocities[el(x,y-1)].x + Velocities[(x + 1,y - 1)].x )/ 4;
+
+	float back_x = (float(x) * STEP - velocity_x * delta)/STEP;
+	float back_y = (float(y) * STEP - velocity_y * delta)/STEP;
+
+	//move from boundaries
+	vec2 xy = reflect_(back_x, back_y, GRID_SIZE - 1, GRID_SIZE);
+
+	//put back on grid
+	uint new_grid_x = uint(xy.x);
+	uint new_grid_y = uint(xy.y);
+
+	Velocities[el()].y = interpolate(
+		Velocities[el(new_grid_x,new_grid_y)].y,
+		Velocities[el(new_grid_x+1,new_grid_y)].y,
+		Velocities[el(new_grid_x,new_grid_y+1)].y,
+		Velocities[el(new_grid_x+1,new_grid_y+1)].y,
+		new_grid_x,
+		new_grid_y,
+		back_x,
+		back_y);
+}
+
+void update_height() {
+	if (x == 0 || x >= GRID_SIZE - 1 || y == 0 || y >= GRID_SIZE - 1)
+		return;
+
+	//compute divergence
+	float divergence = (Velocities[el(x+1,y)].x - Velocities[el()].x)/STEP + (Velocities[el(x,y+1)].y - Velocities[el()].y)/ STEP;
+	Heights[el()].x -= Heights[el()].x * divergence * delta;
+}
+
+void update_velocities() {
+	if (x == 0 || x >= GRID_SIZE - 1 || y == 0 || y >= GRID_SIZE - 1)
+		return;
+
+	float total_height2 = Heights[ el()].y + Heights[ el()].x;
+	if (y >= 2)
+	{
+		float total_height1 = Heights[ el(x,y-1)].y + Heights[ el(x,y-1)].x;
+		//add acceleration
+		Velocities[el()].y += GRAVITY * (total_height1 - total_height2) / STEP * delta;
+	}
+	if (x >= 2)
+	{
+		float total_height1 = Heights[ el(x-1,y)].y + Heights[ el(x-1,y)].x;
+		Velocities[el()].x += GRAVITY * (total_height1 - total_height2) / STEP * delta;
+	}
+}
+
+void boundary_conditions() {
+	//left
+	if (x == 0)
+	{
+		Heights[el()].x = Heights[el(1)].x + Heights[el(1)].y - Heights[el()].y;
+		Velocities[el()].y = 0.0;
+	}
+	if (x == 1)
+	{
+		Velocities[el()].x = 0.0;
+	}
+	//down
+	if (y == 0)
+	{
+		Heights[el()].x = Heights[el(x,1)].x;
+		Velocities[el()].x = 0.0;
+	}
+	if (y == 1)
+	{
+		Velocities[el()].y = 0.0;
+	}
+
+	//up
+	if (y == GRID_SIZE - 1)
+	{
+		Heights[el()].x = Heights[el(x,GRID_SIZE-2)].x + Heights[el(x,GRID_SIZE-2)].y - Heights[el()].y;
+		Velocities[el()].x = 0.0;
+		Velocities[el()].y = 0.0;
+	}
+	//right
+	if (x == GRID_SIZE - 1)
+	{
+		Heights[el()].x = Heights[el(GRID_SIZE-2,y)].x + Heights[el(GRID_SIZE-2,y)].y - Heights[el()].y;
+		Velocities[el()].x = 0.0;
+		Velocities[el()].y = 0.0;
+	}
+}
+
+vec2 coords()
+{
+	return vec2((int(x) - GRID_SIZE / 2) / float(GRID_SIZE / 2), (int(y) - GRID_SIZE / 2) / float(GRID_SIZE / 2));
+}
+
+void add_water(vec3 pos, vec3 dir)
+{
+	if (x == 0 || x >= GRID_SIZE -1 || y == 0 || y >= GRID_SIZE - 1)
+			return;
+
+	float total_height = Heights[el()].x + Heights[el()].y;
+	//compute intersection of a ray from the centre of the camera with a parallel xz plane
+	vec2 intersection = vec2(pos.x + dir.x * (total_height - pos.y)/ dir.y, pos.z + dir.z * (total_height - pos.y)/ dir.y);
+	//out of bounds check 
+	if (intersection.x < -1 || intersection.x > 1 || intersection.y > 1 || intersection.y < -1) 
+		return;
+	float curr_distance = distance(intersection, coords());
+	//close enough
+	if (curr_distance < CIRC_DIST)
+	{
+		//radius of add circle
+		int radius = GRID_SIZE / 20;
+		for (int i = int(x) - radius; i < int(x) + radius; i++)
+		{
+			for (int j = int(y) - radius; j < int(y) + radius; j++)
+			{
+				if (i < 0 || j < 0 || i >= GRID_SIZE || j >= GRID_SIZE)
+					continue;
+				//add height to all elements in circle
+				float dist = distance(vec2(i,j), vec2(int(x),int(y)));
+				if (dist < radius)
+				{
+					Heights[el(i,j)].x += delta*0.1;
+				}
+			}
+		}
+	}
+}
+
+//SWE Solver Algorithm:
+//	1, advect water height
+//	2, advect x velocity
+//	3, advect y velocity
+//	4, update height
+//	5, update velocities
+//	6, apply reflecting boundary conditions
+// implementation source: https://pdfs.semanticscholar.org/c902/c4f2c61734cbf4ec7ee8b792ccb01644943d.pdf
+void main() {
+	delta = Additional[0].w;
+	
+	adv_height();
+	adv_x_velocity();
+	adv_y_velocity();
+
+	update_height();
+	update_velocities();
+
+	boundary_conditions();
+
+	if (Additional[0].xyz != vec3(0,0,0) || Additional[1].xyz != vec3(0,0,0))
+	{
+		add_water(Additional[0].xyz,Additional[1].xyz);
+	}
+}
