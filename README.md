@@ -1,8 +1,8 @@
-# Fluid simulation using Shallow Water Equation
+# Fluid simulation
 
 WIP!
 
-Simulation of water surface using basic Shallow Water Equations solver. The implementation computes advections and updates unknowns in each step.
+Simulation of water surface using virtual pipeline model. The implementation recomputes water outflows in each frame.
 User can add water by holding right mouse button above water surface. The simulations are started by pressing space.
 
 Current results: https://youtu.be/1rcpnTfEVQ0

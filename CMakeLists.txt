@@ -8,6 +8,8 @@ set (CMAKE_CXX_STANDARD 17)
 configure_file(${CMAKE_SOURCE_DIR}/shaders/water_vertex_shader.vert ${CMAKE_BINARY_DIR}/shaders/water_vertex_shader.vert COPYONLY)
 configure_file(${CMAKE_SOURCE_DIR}/shaders/water_fragment_shader.frag ${CMAKE_BINARY_DIR}/shaders/water_fragment_shader.frag COPYONLY)
 configure_file(${CMAKE_SOURCE_DIR}/shaders/swe_compute_shader.comp ${CMAKE_BINARY_DIR}/shaders/swe_compute_shader.comp COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/shaders/update_compute_shader.comp ${CMAKE_BINARY_DIR}/shaders/update_compute_shader.comp COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/shaders/flow_compute_shader.comp ${CMAKE_BINARY_DIR}/shaders/flow_compute_shader.comp COPYONLY)
 configure_file(${CMAKE_SOURCE_DIR}/shaders/HUD_vertex_shader.vert ${CMAKE_BINARY_DIR}/shaders/HUD_vertex_shader.vert COPYONLY)
 configure_file(${CMAKE_SOURCE_DIR}/shaders/HUD_fragment_shader.frag ${CMAKE_BINARY_DIR}/shaders/HUD_fragment_shader.frag COPYONLY)
 configure_file(${CMAKE_SOURCE_DIR}/shaders/terrain_vertex_shader.vert ${CMAKE_BINARY_DIR}/shaders/terrain_vertex_shader.vert COPYONLY)
@@ -32,8 +34,9 @@ add_executable(fluid_simulation
 	utils/shader.cpp
 	utils/camera.cpp
 	utils/hud.cpp
-	fluid_simulator.cpp
-	shallow_water_solver.cpp)
+	utils/perlin.cpp
+	simulator.cpp
+	motion.cpp)
 
 add_dependencies(fluid_simulation glfw glew glm)
 

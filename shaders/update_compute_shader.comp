@@ -1,0 +1,58 @@
+﻿#version 430 core
+
+#extension GL_ARB_compute_shader : enable
+#extension GL_ARB_shader_storage_buffer_object : enable
+
+#define GRID_SIZE 1024
+#define STEP 0.1
+
+//heights info
+layout(std430,binding=0) buffer h
+{
+	vec2 Heights[ ];
+};
+
+//flux info
+layout(std430,binding=1) buffer f
+{
+	vec4 Flux[ ];
+};
+
+//add water position + delta
+layout(std430,binding=2) buffer a
+{
+	vec4 Additional[ ];
+};
+
+layout( local_size_x = 32, local_size_y = 32, local_size_z = 1 ) in;
+
+uint x = gl_GlobalInvocationID.x;
+uint y = gl_GlobalInvocationID.y;
+
+//get element
+uint el(uint arrx = x, uint arry = y)
+{
+	return arrx + arry*GRID_SIZE;
+}
+
+float sum(vec4 toSum)
+{
+	return toSum.x + toSum.y + toSum.z + toSum.w;
+}
+
+void main()
+{
+	//this flows
+	vec4 current_flow = Flux[el()];
+	//adjacent flows
+	vec4 left_flow = (x > 0) ? Flux[el(x-1,y)] : vec4(0);
+	vec4 right_flow = (x < GRID_SIZE - 1) ? Flux[el(x+1,y)] : vec4(0);
+	vec4 top_flow = (y > 0) ? Flux[el(x,y-1)] : vec4(0);
+	vec4 bottom_flow = (y < GRID_SIZE - 1) ? Flux[el(x,y+1)] : vec4(0);
+
+	//total outflow
+	float outflow = ((left_flow.y + right_flow.x + top_flow.w + bottom_flow.z) -
+							(current_flow.x + current_flow.y + current_flow.z + current_flow.w));
+
+	Heights[el()].x += STEP * outflow;
+}

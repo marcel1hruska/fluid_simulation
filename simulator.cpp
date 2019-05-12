@@ -1,4 +1,4 @@
-#include "fluid_simulator.h"
+#include "simulator.h"
 #include <iostream>
 
 using namespace simulation;
@@ -6,7 +6,7 @@ using namespace glm;
 using namespace std;
 
 
-void fluid_simulator::simulate()
+void simulator::simulate()
 {
 	if (!initialise_openGL_())
 		return;
@@ -15,8 +15,8 @@ void fluid_simulator::simulate()
 	glGenVertexArrays(1, &array_id_);
 	glBindVertexArray(array_id_);
 
-	//initialize swe compute shader
-	heights_id_ = s.initialize();
+	//initialize compute shader
+	heights_id_ = m.initialize();
 
 	//initialize own buffers
 	initialise_buffers_();
@@ -65,11 +65,11 @@ void fluid_simulator::simulate()
 			if (glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
 			{
 				h.draw_crosshair();
-				s.recompute(delta_time_, c.get_pos(), c.get_dir());
+				m.recompute(delta_time_, c.get_pos(), c.get_dir());
 			}
 			else
 				//recompute advection and update unknowns
-				s.recompute(delta_time_);
+				m.recompute(delta_time_);
 		}
 
 		glfwSwapBuffers(window_);
@@ -79,12 +79,12 @@ void fluid_simulator::simulate()
 	delete_buffers_();
 
 	h.destroy();
-	s.destroy();
+	m.destroy();
 
 	glfwTerminate();
 }
 
-bool simulation::fluid_simulator::initialise_openGL_()
+bool simulation::simulator::initialise_openGL_()
 {
 	// initialize GLFW
 	if (!glfwInit())
@@ -133,12 +133,12 @@ bool simulation::fluid_simulator::initialise_openGL_()
 	return true;
 }
 
-void simulation::fluid_simulator::initialise_buffers_()
+void simulation::simulator::initialise_buffers_()
 {
 	water_shader_id_ = utils::process_shaders("shaders/water_vertex_shader.vert", "shaders/water_fragment_shader.frag");
 	terrain_shader_id_ = utils::process_shaders("shaders/terrain_vertex_shader.vert", "shaders/terrain_fragment_shader.frag");
 
-	auto heights = s.get_heights();
+	auto heights = m.get_heights();
 
 	//create water vertex buffer
 	glGenBuffers(1, &water_vertex_id_);
@@ -177,21 +177,41 @@ void simulation::fluid_simulator::initialise_buffers_()
 	}
 	glUnmapBuffer(GL_ARRAY_BUFFER);
 
-	//create color buffer
-	glGenBuffers(1, &color_id_);
-	glBindBuffer(GL_ARRAY_BUFFER, color_id_);
+	//create water color buffer
+	glGenBuffers(1, &water_color_id_);
+	glBindBuffer(GL_ARRAY_BUFFER, water_color_id_);
 	glBufferData(GL_ARRAY_BUFFER, PARTICLES * sizeof(vec4), NULL, GL_STATIC_DRAW);
 
 	//initialize color buffer
-	vec4 * colors = (vec4 *)glMapBufferRange(GL_ARRAY_BUFFER, 0, PARTICLES * sizeof(vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+	vec4 * water_colors = (vec4 *)glMapBufferRange(GL_ARRAY_BUFFER, 0, PARTICLES * sizeof(vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
 	for (int y = 0; y < GRID_SIZE; y++)
 	{
 		for (int x = 0; x < GRID_SIZE; x++)
 		{
-			colors[y*GRID_SIZE + x].r = colors[y*GRID_SIZE + x].g = 0.5;
-			colors[y*GRID_SIZE + x].b = 1.0;
+			water_colors[y*GRID_SIZE + x].r = water_colors[y*GRID_SIZE + x].g = 0.7;
+			water_colors[y*GRID_SIZE + x].b = 0.7;
 			//half transparent
-			colors[y*GRID_SIZE + x].a = 0.5;
+			water_colors[y*GRID_SIZE + x].a = 0.5;
+		}
+	}
+	glUnmapBuffer(GL_ARRAY_BUFFER);
+
+	//create terrain color buffer
+	glGenBuffers(1, &terrain_color_id_);
+	glBindBuffer(GL_ARRAY_BUFFER, terrain_color_id_);
+	glBufferData(GL_ARRAY_BUFFER, PARTICLES * sizeof(vec4), NULL, GL_STATIC_DRAW);
+
+	//initialize color buffer
+	vec4 * terrain_colors = (vec4 *)glMapBufferRange(GL_ARRAY_BUFFER, 0, PARTICLES * sizeof(vec4), GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
+	for (int y = 0; y < GRID_SIZE; y++)
+	{
+		for (int x = 0; x < GRID_SIZE; x++)
+		{
+			terrain_colors[y*GRID_SIZE + x].r = 0.3 + heights[y*GRID_SIZE + x].terrain*0.6;
+			terrain_colors[y*GRID_SIZE + x].g = 0.2 + heights[y*GRID_SIZE + x].terrain*0.3;
+			terrain_colors[y*GRID_SIZE + x].b = 0;
+			//half transparent
+			terrain_colors[y*GRID_SIZE + x].a = 1.0;
 		}
 	}
 	glUnmapBuffer(GL_ARRAY_BUFFER);
@@ -213,18 +233,19 @@ void simulation::fluid_simulator::initialise_buffers_()
 	glUnmapBuffer(GL_ELEMENT_ARRAY_BUFFER);
 }
 
-void simulation::fluid_simulator::delete_buffers_()
+void simulation::simulator::delete_buffers_()
 {
 	glDeleteBuffers(1, &water_vertex_id_);
 	glDeleteBuffers(1, &terrain_vertex_id_);
-	glDeleteBuffers(1, &color_id_);
+	glDeleteBuffers(1, &water_color_id_);
+	glDeleteBuffers(1, &terrain_color_id_);
 	glDeleteBuffers(1, &mesh_element_id_);
 	glDeleteProgram(water_shader_id_);
 	glDeleteProgram(terrain_shader_id_);
 	glDeleteVertexArrays(1, &array_id_);
 }
 
-void simulation::fluid_simulator::draw_water_()
+void simulation::simulator::draw_water_()
 {
 	glUseProgram(water_shader_id_);
 
@@ -234,19 +255,22 @@ void simulation::fluid_simulator::draw_water_()
 	// vertices
 	glEnableVertexAttribArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, water_vertex_id_);
-	//glBufferData(GL_ARRAY_BUFFER, sizeof(grid_array), water_buffer_data_, GL_DYNAMIC_DRAW);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 	// colors
 	glEnableVertexAttribArray(1);
-	glBindBuffer(GL_ARRAY_BUFFER, color_id_);
-	//glBufferData(GL_ARRAY_BUFFER, sizeof(color_array), color_buffer_data_, GL_DYNAMIC_DRAW);
+	glBindBuffer(GL_ARRAY_BUFFER, water_color_id_);
 	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 	// height
 	glEnableVertexAttribArray(2);
-	glBindBuffer(GL_ARRAY_BUFFER, heights_id_);
+	glBindBuffer(GL_ARRAY_BUFFER, m.heights_id());
 	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+	// height
+	glEnableVertexAttribArray(3);
+	glBindBuffer(GL_ARRAY_BUFFER, m.flux_id());
+	glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh_element_id_);
 
@@ -258,7 +282,7 @@ void simulation::fluid_simulator::draw_water_()
 	glDisableVertexAttribArray(2);
 }
 
-void simulation::fluid_simulator::draw_terrain_()
+void simulation::simulator::draw_terrain_()
 {
 	auto color_id = glGetUniformLocation(terrain_shader_id_, "color");
 
@@ -266,13 +290,15 @@ void simulation::fluid_simulator::draw_terrain_()
 	// send transformation to the shader
 	glUniformMatrix4fv(c.matrix_id, 1, GL_FALSE, &c.transform_matrix[0][0]);
 
-	//send color to the shader
-	glUniform4fv(color_id, 1, terrain_color_);
-
 	// vertices
 	glEnableVertexAttribArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, terrain_vertex_id_);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+	// vertices
+	glEnableVertexAttribArray(1);
+	glBindBuffer(GL_ARRAY_BUFFER, terrain_color_id_);
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh_element_id_);
 
@@ -282,7 +308,7 @@ void simulation::fluid_simulator::draw_terrain_()
 	glDisableVertexAttribArray(0);
 }
 
-void simulation::fluid_simulator::push_indices_(size_t * indices, size_t x, size_t y)
+void simulation::simulator::push_indices_(size_t * indices, size_t x, size_t y)
 {
 	//first triangle
 	indices[y*GRID_SIZE*6 + x*6] = y * GRID_SIZE + x;

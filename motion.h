@@ -29,13 +29,37 @@ namespace simulation
 		float y;
 	};
 
+	struct flux
+	{
+		float left;
+		float right;
+		float top;
+		float bottom;
+	};
+
 	struct add_info
 	{
 		glm::vec3 pos;
 		float delta;
 	};
 
-	/* Shallow Water Equations basic version:
+	/*
+		IMPORTANT
+		!!!
+		Currently implemented but not using
+		Simple pipeline model proved to be less time-consuming, more stable and provide sufficient visual results
+		To use the SWE, uncomment parts starting with SWE and comment out FLOW
+		!!!
+
+		Water Simulation, virtual pipe model:
+
+		2 passes (2 compute shaders)
+		1. compute outflows for each cell in grid
+		2. use these outflows to compute new water heights
+
+
+		NOT USED
+		Shallow Water Equations basic version:
 
 		∂η/∂t+(∇η)v = −η∇v
 		∂v/∂t+(∇v)v = a∇h
@@ -56,23 +80,27 @@ namespace simulation
 		right side - additional acceleration/gravity
 		source: https://pdfs.semanticscholar.org/c902/c4f2c61734cbf4ec7ee8b792ccb01644943d.pdf
 	*/
-	class swe_solver
+	class motion
 	{
 	public:
 		GLuint initialize();
-		//recomputes heights and velocities + adds water if necessary
+		//recomputes heights + adds water if necessary
 		void recompute(double delta, glm::vec3 pos = glm::vec3(0,0,0), glm::vec3 dir = glm::vec3(0,0,0));
 		//returns heights
 		height * get_heights();
+		GLuint flux_id();
+		GLuint heights_id();
 		//destroy solver
 		void destroy();
 	private:
-		GLuint compute_shader_id_, height_ssbo_id_, vel_ssbo_id_, add_ssbo_id_;
+		GLuint compute_shader_id_, height_ssbo_id_, vel_ssbo_id_, flux_ssbo_id_, add_ssbo_id_, flow_shader_id_, update_shader_id_;
 		//keep heights and additional info buffers
 		height* heights_;
 		add_info * info_;
+		flux * fl_;
 		//time delta
 		double delta_;
+		glm::vec2 coords(int x, int y);
 	};
 }
 

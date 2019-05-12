@@ -1,7 +1,7 @@
-﻿#include "fluid_simulator.h"
+﻿#include "simulator.h"
 
 int main(int argc, char ** argv)
 {
-	simulation::fluid_simulator fs;
+	simulation::simulator fs;
 	fs.simulate();
 }
