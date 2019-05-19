@@ -1,6 +1,5 @@
 #include "motion.h"
 #include "utils/shader.h"
-#include "utils/perlin.h"
 
 using namespace simulation;
 using namespace glm;
@@ -13,8 +12,11 @@ void GLAPIENTRY MessageCallback(GLenum source,GLenum type,GLuint id,GLenum sever
 		type, severity, message);
 }
 
-GLuint simulation::motion::initialize()
+GLuint simulation::motion::initialize(utils::settings * s)
 {
+	//remember settings
+	s_ = s;
+
 	glEnable(GL_DEBUG_OUTPUT);
 	glDebugMessageCallback(MessageCallback, 0);
 
@@ -33,34 +35,7 @@ GLuint simulation::motion::initialize()
 
 	//initialize, keep mapped to heights_
 	heights_ = (height *)glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, PARTICLES * sizeof(height), GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_INVALIDATE_BUFFER_BIT);
-	for (size_t y = 0; y < GRID_SIZE; y++)
-	{
-		for (int x = 0; x < GRID_SIZE; x++)
-		{
-			//DAM BREAK
-			if (distance(coords(x,y),vec2(-1,-1)) < 1.2)
-				heights_[x + y*GRID_SIZE].water = WATER_HEIGHT + 0.5;
-			else
-				heights_[x + y*GRID_SIZE].water = WATER_HEIGHT;
-				
-			//NORMAL
-			//heights_[x + y*GRID_SIZE].water = WATER_HEIGHT;
-
-			//PLATFORM, not very nice
-			/*
-			if (x < GRID_SIZE / 4 && y < GRID_SIZE / 4)
-				heights_[x + y * GRID_SIZE].terrain = TERRAIN_HEIGHT + 0.2;
-			else
-				heights_[x + y * GRID_SIZE].terrain = TERRAIN_HEIGHT;
-			*/
-			// GROUND
-			//heights_[x + y * GRID_SIZE].terrain = TERRAIN_HEIGHT;
-			//PERLIN NOISE
-			auto current = coords(x, y);
-			heights_[x + y * GRID_SIZE].terrain = p.make_some_noise(16*(current.x + 1)/2, 16*(current.y + 1) / 2, TERRAIN_HEIGHT, 7);
-		}
-	}
-
+	initialize_heights();
 	glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 
 	/*
@@ -108,9 +83,9 @@ GLuint simulation::motion::initialize()
 	return height_ssbo_id_;
 }
 
-void simulation::motion::recompute(double delta, vec3 pos, vec3 dir)
+void simulation::motion::recompute(vec3 pos, vec3 dir)
 {
-	info_[0] = { pos, 0.1f };
+	info_[0] = { pos, s_->speed };
 	info_[1] = { dir,1 };
 
 	/*
@@ -166,7 +141,59 @@ void simulation::motion::destroy()
 	glDeleteProgram(compute_shader_id_);
 }
 
+void simulation::motion::initialize_heights()
+{
+	for (size_t y = 0; y < GRID_SIZE; y++)
+	{
+		for (int x = 0; x < GRID_SIZE; x++)
+		{
+			auto current = coords(x, y);
+
+			switch (s_->terrain)
+			{
+			case utils::terrain_mode::ground:
+				heights_[x + y * GRID_SIZE].terrain = TERRAIN_HEIGHT * perlin_noise_[x + y * GRID_SIZE];
+				break;
+			case utils::terrain_mode::plain:
+				heights_[x + y * GRID_SIZE].terrain = TERRAIN_HEIGHT;
+				break;
+			case utils::terrain_mode::crater:
+				auto dist = distance(current, vec2(0, 0));
+				if (dist < 1)
+					heights_[x + y * GRID_SIZE].terrain = perlin_noise_[x + y * GRID_SIZE]* dist;
+				else
+					heights_[x + y * GRID_SIZE].terrain = perlin_noise_[x + y * GRID_SIZE];
+
+				break;
+			}
+
+			switch (s_->water)
+			{
+			case utils::water_mode::dam:
+				if (distance(current, vec2(-1, -1)) < 1.2)
+					heights_[x + y * GRID_SIZE].water = WATER_HEIGHT;
+				else
+					heights_[x + y * GRID_SIZE].water = 0;
+				break;
+			case utils::water_mode::free:
+				heights_[x + y * GRID_SIZE].water = WATER_HEIGHT;
+				break;
+			case utils::water_mode::nothing:
+				heights_[x + y * GRID_SIZE].water = 0;
+				break;
+			case utils::water_mode::pond:
+				auto dist = distance(current, vec2(0, 0));
+				if (dist < 0.5)
+					heights_[x + y * GRID_SIZE].water = WATER_HEIGHT/4;
+				else
+					heights_[x + y * GRID_SIZE].water = 0;
+				break;
+			}
+		}
+	}
+}
+
 vec2 motion::coords(int x, int y)
 {
-	return vec2((x - GRID_SIZE / 2) / (float)GRID_SIZE / 2, (y - GRID_SIZE / 2) / (float)GRID_SIZE / 2);
+	return vec2((GLfloat)(x - GRID_SIZE / 2) / (GLfloat)(GRID_SIZE / 2), (GLfloat)(y - GRID_SIZE / 2) / (GLfloat)(GRID_SIZE / 2));
 }

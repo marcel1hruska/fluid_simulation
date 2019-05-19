@@ -10,10 +10,10 @@
 #include <map>
 
 #define MOUSE_SENSITIVITY 0.05f
-#define KEYBOARD_SENSITIVITY 4.0f
+#define KEYBOARD_SENSITIVITY 2.0f
 
-#define WINDOW_WIDTH 1024
-#define WINDOW_HEIGHT 768
+#define WINDOW_WIDTH 1280
+#define WINDOW_HEIGHT 720
 
 namespace utils {
 	class camera

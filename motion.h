@@ -9,8 +9,10 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <vector>
 #include <array>
+#include "utils/hud.h"
+#include "utils/perlin.h"
 
-#define WATER_HEIGHT 0
+#define WATER_HEIGHT 0.5
 #define TERRAIN_HEIGHT 0.5
 #define GRID_SIZE 1024
 #define PARTICLES GRID_SIZE*GRID_SIZE
@@ -83,15 +85,30 @@ namespace simulation
 	class motion
 	{
 	public:
-		GLuint initialize();
+		motion() 
+		{ 
+			utils::perlin_noise p;
+			perlin_noise_ = new float[PARTICLES];
+			for (size_t y = 0; y < GRID_SIZE; y++)
+			{
+				for (int x = 0; x < GRID_SIZE; x++)
+				{
+					auto current = coords(x, y);
+					perlin_noise_[x + y * GRID_SIZE] = p.make_some_noise(8 * (current.x + 1) / 2, 8 * (current.y + 1) / 2, TERRAIN_HEIGHT, 5);
+				}
+			}
+		}
+		~motion() { delete[] perlin_noise_; }
+		GLuint initialize(utils::settings * s);
 		//recomputes heights + adds water if necessary
-		void recompute(double delta, glm::vec3 pos = glm::vec3(0,0,0), glm::vec3 dir = glm::vec3(0,0,0));
+		void recompute(glm::vec3 pos = glm::vec3(0,0,0), glm::vec3 dir = glm::vec3(0,0,0));
 		//returns heights
 		height * get_heights();
 		GLuint flux_id();
 		GLuint heights_id();
 		//destroy solver
 		void destroy();
+		void initialize_heights();
 	private:
 		GLuint compute_shader_id_, height_ssbo_id_, vel_ssbo_id_, flux_ssbo_id_, add_ssbo_id_, flow_shader_id_, update_shader_id_;
 		//keep heights and additional info buffers
@@ -101,6 +118,8 @@ namespace simulation
 		//time delta
 		double delta_;
 		glm::vec2 coords(int x, int y);
+		utils::settings * s_;
+		float * perlin_noise_;
 	};
 }
 

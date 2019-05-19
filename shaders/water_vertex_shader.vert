@@ -3,7 +3,6 @@
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec4 color;
 layout(location = 2) in vec2 height;
-layout(location = 3) in vec4 flux;
 
 // transform matrix
 uniform  mat4 transform_matrix;

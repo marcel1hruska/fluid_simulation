@@ -5,53 +5,50 @@ using namespace simulation;
 using namespace glm;
 using namespace std;
 
-
 void simulator::simulate()
 {
 	if (!initialise_openGL_())
 		return;
 
-	//create vertex array
-	glGenVertexArrays(1, &array_id_);
-	glBindVertexArray(array_id_);
-
+	utils::settings s = { 0, utils::terrain_mode::crater, utils::water_mode::pond, 0.1, false };
 	//initialize compute shader
-	heights_id_ = m.initialize();
+	heights_id_ = m.initialize(&s);
 
 	//initialize own buffers
 	initialise_buffers_();
 
-	//TODO water textures
-	//location_reflection_texture_ = glGetUniformLocation(shader_id_,"reflection_texture");
-	//location_refraction_texture_ = glGetUniformLocation(shader_id_, "refraction_texture");
-
 	c.initialise(glGetUniformLocation(water_shader_id_, "transform_matrix"), window_, WATER_HEIGHT + TERRAIN_HEIGHT);
 
-	h.initialize();
+	if (!h.initialize(window_))
+	{
+		return;
+	};
 
 	last_frame_ = glfwGetTime() - 0.01;
 
 	//end on escape
 	while (!glfwWindowShouldClose(window_) && glfwGetKey(window_,GLFW_KEY_ESCAPE) != GLFW_PRESS)
 	{
+		glfwMakeContextCurrent(window_);
+
 		auto current_frame = glfwGetTime();
-		delta_time_ = current_frame - last_frame_;
+		s.delta = current_frame - last_frame_;
 		last_frame_ = current_frame;
 
 		// clear colors and depth
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		c.reposition(delta_time_);
-		
+		c.reposition(s.delta);
+
 		//draw meshes
 		draw_terrain_();
 
 		draw_water_();
 		
 		//start simulation on space
-		if (glfwGetKey(window_, GLFW_KEY_SPACE) == GLFW_PRESS && !was_space_pressed_)
+		if (glfwGetKey(window_, GLFW_KEY_SPACE) == GLFW_PRESS && !was_space_pressed_) 
 		{
-			run_ = !run_;
+			s.running = !s.running;
 			was_space_pressed_ = true;
 		}
 		else if (glfwGetKey(window_, GLFW_KEY_SPACE) == GLFW_RELEASE)
@@ -59,17 +56,23 @@ void simulator::simulate()
 			was_space_pressed_ = false;
 		}
 
-		if (run_)
+		if (s.running)
 		{
 			//check for right mouse button -> add water to the middle pressed
 			if (glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
 			{
 				h.draw_crosshair();
-				m.recompute(delta_time_, c.get_pos(), c.get_dir());
+				m.recompute(c.get_pos(), c.get_dir());
 			}
 			else
 				//recompute advection and update unknowns
-				m.recompute(delta_time_);
+				m.recompute();
+		}
+
+		if (h.display_hud(s))
+		{
+			s.running = false;
+			m.initialize_heights();
 		}
 
 		glfwSwapBuffers(window_);
@@ -84,6 +87,7 @@ void simulator::simulate()
 	glfwTerminate();
 }
 
+
 bool simulation::simulator::initialise_openGL_()
 {
 	// initialize GLFW
@@ -97,7 +101,7 @@ bool simulation::simulator::initialise_openGL_()
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
+	
 	// create window
 	window_ = glfwCreateWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Fluid Simulation", NULL, NULL);
 	if (window_ == NULL) {
@@ -129,6 +133,10 @@ bool simulation::simulator::initialise_openGL_()
 	//blending
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	
+	//create vertex array
+	glGenVertexArrays(1, &array_id_);
+	glBindVertexArray(array_id_);
 
 	return true;
 }
@@ -137,6 +145,9 @@ void simulation::simulator::initialise_buffers_()
 {
 	water_shader_id_ = utils::process_shaders("shaders/water_vertex_shader.vert", "shaders/water_fragment_shader.frag");
 	terrain_shader_id_ = utils::process_shaders("shaders/terrain_vertex_shader.vert", "shaders/terrain_fragment_shader.frag");
+
+	location_reflection_texture_ = glGetUniformLocation(water_shader_id_, "reflection_texture");
+	location_refraction_texture_ = glGetUniformLocation(water_shader_id_, "refraction_texture");
 
 	auto heights = m.get_heights();
 
@@ -267,10 +278,6 @@ void simulation::simulator::draw_water_()
 	glBindBuffer(GL_ARRAY_BUFFER, m.heights_id());
 	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
-	// height
-	glEnableVertexAttribArray(3);
-	glBindBuffer(GL_ARRAY_BUFFER, m.flux_id());
-	glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh_element_id_);
 
@@ -299,6 +306,11 @@ void simulation::simulator::draw_terrain_()
 	glEnableVertexAttribArray(1);
 	glBindBuffer(GL_ARRAY_BUFFER, terrain_color_id_);
 	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+	// height
+	glEnableVertexAttribArray(2);
+	glBindBuffer(GL_ARRAY_BUFFER, m.heights_id());
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh_element_id_);
 
