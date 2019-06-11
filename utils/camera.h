@@ -1,6 +1,8 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
+#include <GL/glew.h>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -9,8 +11,8 @@
 #include <utility>
 #include <map>
 
-#define MOUSE_SENSITIVITY 0.05f
-#define KEYBOARD_SENSITIVITY 2.0f
+#define MOUSE_SENSITIVITY 0.02f
+#define KEYBOARD_SENSITIVITY 1.0f
 
 #define WINDOW_WIDTH 1280
 #define WINDOW_HEIGHT 720
@@ -20,9 +22,9 @@ namespace utils {
 	{
 	public:
 		camera() {}
-		void initialise(GLuint matrix_id, GLFWwindow* window, int height);
+		void initialise(GLuint water_matrix_id, GLuint terrain_matrix_id, GLFWwindow* window, int height);
 		void reposition(double delta);
-		GLuint matrix_id;
+		GLuint water_matrix_id, terrain_matrix_id;
 		glm::mat4 transform_matrix;
 		glm::vec3 get_pos();
 		glm::vec3 get_dir();

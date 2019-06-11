@@ -2,10 +2,8 @@
 #extension GL_ARB_compute_shader : enable
 #extension GL_ARB_shader_storage_buffer_object : enable
 
-#define GRID_SIZE 1024
-#define DAMPING 0.999
+#define DAMPING 0.998
 #define GRAVITY 10
-#define CIRC_DIST sqrt((1/float(GRID_SIZE))*(1/float(GRID_SIZE)) + (1/float(GRID_SIZE))*(1/float(GRID_SIZE)))
 
 //heights info
 layout(std430,binding=0) buffer h
@@ -19,10 +17,14 @@ layout(std430,binding=1) buffer f
 	vec4 Flux[ ];
 };
 
-//add water position + delta
-layout(std430,binding=2) buffer a
-{
-	vec4 Additional[ ];
+layout(std140) uniform settings {
+	vec4 camera_position;
+	vec4 camera_direction;
+	vec4 rand_pos;
+	int mode;
+	int grid_size;
+	int cube_size;
+	float delta;
 };
 
 layout( local_size_x = 32, local_size_y = 32, local_size_z = 1 ) in;
@@ -33,19 +35,12 @@ uint y = gl_GlobalInvocationID.y;
 //get element
 uint el(uint arrx = x, uint arry = y)
 {
-	return arrx + arry*GRID_SIZE;
+	return arrx + arry*grid_size;
 }
-
-float delta;
 
 float total_height(vec2 height)
 {
 	return height.x + height.y;
-}
-
-vec2 coords()
-{
-	return vec2((int(x) - GRID_SIZE / 2) / float(GRID_SIZE / 2), (int(y) - GRID_SIZE / 2) / float(GRID_SIZE / 2));
 }
 
 float sum(vec4 toSum)
@@ -53,69 +48,33 @@ float sum(vec4 toSum)
 	return toSum.x + toSum.y + toSum.z + toSum.w;
 }
 
-void add_water(vec3 pos, vec3 dir)
-{
-	if (x == 0 || x >= GRID_SIZE -1 || y == 0 || y >= GRID_SIZE - 1)
-			return;
-
-	float total_height = Heights[el()].x + Heights[el()].y;
-	//compute intersection of a ray from the centre of the camera with a parallel xz plane
-	vec2 intersection = vec2(pos.x + dir.x * (total_height - pos.y)/ dir.y, pos.z + dir.z * (total_height - pos.y)/ dir.y);
-	//out of bounds check 
-	if (intersection.x < -1 || intersection.x > 1 || intersection.y > 1 || intersection.y < -1) 
-		return;
-	float curr_distance = distance(intersection, coords());
-	//close enough
-	if (curr_distance < CIRC_DIST)
-	{
-		//radius of add circle
-		int radius = GRID_SIZE / 20;
-		for (int i = int(x) - radius; i < int(x) + radius; i++)
-		{
-			for (int j = int(y) - radius; j < int(y) + radius; j++)
-			{
-				if (i < 0 || j < 0 || i >= GRID_SIZE || j >= GRID_SIZE)
-					continue;
-				//add height to all elements in circle
-				float dist = distance(vec2(i,j), vec2(int(x),int(y)));
-				if (dist < radius)
-				{
-					Heights[el(i,j)].x += 0.01;
-				}
-			}
-		}
-	}
-}
-
 void main()
 {
-	float step_ = Additional[0].w;
-	if (Additional[0].xyz != vec3(0,0,0) || Additional[1].xyz != vec3(0,0,0))
-	{
-		add_water(Additional[0].xyz,Additional[1].xyz);
-	}
+	if (x == 0 || x >= grid_size -1 || y == 0 || y >= grid_size - 1)
+			return;
 
 	//adjacent heights
 	vec4 adj_heights = vec4(
-		((x > 0) ? Heights[el(x-1,y)].x : 0) + ((x > 0) ? Heights[el(x-1,y)].y : 0),
-		((x < GRID_SIZE - 1) ? Heights[el(x+1,y)].x : 0) + ((x < GRID_SIZE - 1) ? Heights[el(x+1,y)].y : 0),
-		((y > 0) ? Heights[el(x,y-1)].x : 0) + ((y > 0) ? Heights[el(x,y-1)].y : 0),
-		((y < GRID_SIZE - 1) ? Heights[el(x,y+1)].x : 0) + ((y < GRID_SIZE - 1) ? Heights[el(x,y+1)].y : 0));
+		((x > 1) ? Heights[el(x-1,y)].x : 0) + ((x > 1) ? Heights[el(x-1,y)].y : 0),
+		((x < grid_size - 2) ? Heights[el(x+1,y)].x : 0) + ((x < grid_size - 2) ? Heights[el(x+1,y)].y : 0),
+		((y > 1) ? Heights[el(x,y-1)].x : 0) + ((y > 1) ? Heights[el(x,y-1)].y : 0),
+		((y < grid_size - 2) ? Heights[el(x,y+1)].x : 0) + ((y < grid_size - 2) ? Heights[el(x,y+1)].y : 0));
+
+	float current_water_height = Heights[el()].x;
 
 	//difference between current and adjacent
-	vec4 height_dif = vec4(total_height(Heights[el()])) - adj_heights;
+	vec4 height_dif = vec4(current_water_height + Heights[el()].y) - adj_heights;
 
 	//acceleration using gravity
 	vec4 accel = GRAVITY*height_dif;
 
 	//whole outflow
-	vec4 outflow = DAMPING*Flux[el()] + step_*accel;
+	vec4 outflow = DAMPING*Flux[el()] + delta*accel;
 
 	//remove negative values
 	outflow = max(vec4(0), outflow);
 
-	float current_water_height = Heights[el()].x;
-	float out_water = sum(outflow)*step_;
+	float out_water = sum(outflow)*delta;
 
 	if (out_water == 0.0)
 		outflow = vec4(0);
@@ -128,10 +87,10 @@ void main()
 	}
 
 	//reflective boundaries
-	if (x == 0) outflow.x = 0;
-	if (y == 0) outflow.z = 0;
-	if (x >= GRID_SIZE - 1) outflow.y = 0;
-	if (y >= GRID_SIZE - 1) outflow.w = 0;	
+	if (x == 1) outflow.x = 0;
+	if (y == 1) outflow.z = 0;
+	if (x >= grid_size - 2) outflow.y = 0;
+	if (y >= grid_size - 2) outflow.w = 0;	
 
 	Flux[el()] = outflow;
 }

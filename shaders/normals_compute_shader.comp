@@ -1,0 +1,79 @@
+#version 430 core
+
+#extension GL_ARB_compute_shader : enable
+#extension GL_ARB_shader_storage_buffer_object : enable
+
+//heights info
+layout(std430,binding=0) buffer h
+{
+	vec2 Heights[ ];
+};
+
+//normals info
+layout(std430,binding=1) buffer n
+{
+	vec4 Normals[ ];
+};
+
+//additional info
+layout(std140) uniform settings {
+	vec4 camera_position;
+	vec4 camera_direction;
+	vec4 rand_pos;
+	int mode;
+	int grid_size;
+	int cube_size;
+	float delta;
+};
+
+layout( local_size_x = 32, local_size_y = 32, local_size_z = 1 ) in;
+
+uint x = gl_GlobalInvocationID.x;
+uint y = gl_GlobalInvocationID.y;
+
+//get element
+uint el(uint arrx, uint arry)
+{
+	return arrx + arry * grid_size;
+}
+
+// compute triangle normal
+vec3 triangle_normal(vec3 v0,vec3 v1,vec3 v2)
+{
+	return normalize(cross(v1 - v0, v2 - v0));
+}
+
+vec2 coords(uint x1, uint y1)
+{
+	return vec2((int(x1) - grid_size / 2) / float(grid_size / 2), (int(y1) - grid_size / 2) / float(grid_size / 2));
+}
+
+// create vector from our buffers
+vec3 makevec3(uint x1, uint y1)
+{
+	vec2 current_coords = coords(x1, y1);
+	vec2 current_height = Heights[el(x1, y1)];
+	return vec3(current_coords.x, current_height.x + current_height.y, current_coords.y);
+}
+
+void main()
+{
+	vec3 result = vec3(0);
+	vec3 current = makevec3(x,y);
+	if (x == 0 || y == 0 || x == grid_size - 1 || y == grid_size - 1)
+		return;
+
+	// compute vertex normal as an average of surrounding faces (triangles) normals
+	Normals[el(x,y)] = vec4(normalize(triangle_normal(current,makevec3(x-1,y-1),makevec3(x,y-1)) + 
+							triangle_normal(current,makevec3(x,y-1),makevec3(x+1,y)) + 
+							triangle_normal(current,makevec3(x,y-1),makevec3(x-1,y)) + 
+							triangle_normal(current,makevec3(x+1,y+1),makevec3(x,y+1))),1);
+
+	// check whether the cell should be drawn
+	// no if the water height is very small and one of its neighbours is a higher terrain
+	if (Heights[el(x,y)].x < 0.002 && (Heights[el(x-1,y)].y >= Heights[el(x,y)].x +  Heights[el(x,y)].y ||
+				Heights[el(x+1,y)].y >= Heights[el(x,y)].x +  Heights[el(x,y)].y ||
+				Heights[el(x,y+1)].y >= Heights[el(x,y)].x +  Heights[el(x,y)].y ||
+				Heights[el(x,y-1)].y >= Heights[el(x,y)].x +  Heights[el(x,y)].y))
+		Normals[el(x,y)].w = 0;
+}

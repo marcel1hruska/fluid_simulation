@@ -3,8 +3,6 @@
 #extension GL_ARB_compute_shader : enable
 #extension GL_ARB_shader_storage_buffer_object : enable
 
-#define GRID_SIZE 1024
-
 //heights info
 layout(std430,binding=0) buffer h
 {
@@ -17,10 +15,15 @@ layout(std430,binding=1) buffer f
 	vec4 Flux[ ];
 };
 
-//add water position + delta
-layout(std430,binding=2) buffer a
-{
-	vec4 Additional[ ];
+//additional info
+layout(std140) uniform settings {
+	vec4 camera_position;
+	vec4 camera_direction;
+	vec4 rand_pos;
+	int mode;
+	int grid_size;
+	int cube_size;
+	float delta;
 };
 
 layout( local_size_x = 32, local_size_y = 32, local_size_z = 1 ) in;
@@ -28,10 +31,13 @@ layout( local_size_x = 32, local_size_y = 32, local_size_z = 1 ) in;
 uint x = gl_GlobalInvocationID.x;
 uint y = gl_GlobalInvocationID.y;
 
+float vertex_size;
+float circ_dist;
+
 //get element
 uint el(uint arrx = x, uint arry = y)
 {
-	return arrx + arry*GRID_SIZE;
+	return arrx + arry*grid_size;
 }
 
 float sum(vec4 toSum)
@@ -39,20 +45,171 @@ float sum(vec4 toSum)
 	return toSum.x + toSum.y + toSum.z + toSum.w;
 }
 
+vec2 coords()
+{
+	return vec2((int(x) - grid_size / 2) / float(grid_size / 2), (int(y) - grid_size / 2) / float(grid_size / 2));
+}
+
+// pressure mode, increases flux on sides
+void add_pressure()
+{
+	float total_height = Heights[el()].x + Heights[el()].y;
+	//compute intersection of a ray from the centre of the camera with a parallel xz plane
+	vec2 intersection = vec2(camera_position.x + camera_direction.x * (total_height - camera_position.y)/ camera_direction.y, camera_position.z + camera_direction.z * (total_height - camera_position.y)/ camera_direction.y);
+	//out of bounds check 
+	if (intersection.x < -1 || intersection.x > 1 || intersection.y > 1 || intersection.y < -1) 
+		return;
+	float curr_distance = distance(intersection, coords());
+	//close enough
+	if (curr_distance < circ_dist)
+	{
+		Flux[el()].y += 0.01;
+		Flux[el()].w += 0.01;
+	}
+}
+
+// rain mode, small height increases on random positions
+void rain()
+{
+	if (x == rand_pos.x && y == rand_pos.y)
+	{
+		//radius of add circle
+		int radius = grid_size/128;
+		for (int i = int(x) - radius; i < int(x) + radius; i++)
+		{
+			for (int j = int(y) - radius; j < int(y) + radius; j++)
+			{
+				if (i < 1 || j < 1 || i >= grid_size - 1 || j >= grid_size - 1)
+					continue;
+				//add height to all elements in circle
+				float dist = distance(vec2(i,j), vec2(int(x),int(y)));
+				if (dist < radius)
+				{
+					Heights[el(i,j)].x += 0.01;
+				}
+			}
+		}
+	}
+}
+
+// waterfall mode, creates permanent water in the corner
+void waterfall()
+{
+	float dist = distance(vec2(0,0), vec2(int(x),int(y)));
+	if (dist < grid_size / 32)
+	{
+		Heights[el()].x = 0.4;
+	}
+}
+
+// object interaction mode, repositions water from object
+// sets flux to 0, reflective, no flow inside object
+void object()
+{
+	// center of the cube
+	vec3 center = camera_position.xyz + 0.8*camera_direction.xyz;
+	float total_height = Heights[el()].x + Heights[el()].y;
+	vec2 current = coords();
+	//"volume" of water in the cube from the current water column
+	float in_cube_height = total_height - center.y + cube_size*vertex_size;
+
+	// inside the cube and there is enough water to move
+	if (current.x > center.x - cube_size*vertex_size && current.x < center.x + cube_size*vertex_size &&
+		current.y > center.z - cube_size*vertex_size && current.y < center.z + cube_size*vertex_size &&
+		Heights[el()].x > 0 && 
+		in_cube_height < Heights[el()].x &&
+		 in_cube_height > 0)
+	{	
+		// remove from current
+		Heights[el()].x -= in_cube_height;
+		//move to neighbours
+		Heights[el(x+1,y)].x += in_cube_height/4;
+		Heights[el(x,y+1)].x += in_cube_height/4;
+		Heights[el(x-1,y)].x += in_cube_height/4;
+		Heights[el(x,y-1)].x += in_cube_height/4;
+	}
+
+	// little bigger than sizes before, creates barrier
+	if (current.x > center.x - cube_size*vertex_size - 2*vertex_size  && current.x < center.x + cube_size*vertex_size + 2*vertex_size &&
+		current.y > center.z - cube_size*vertex_size - 2*vertex_size && current.y < center.z + cube_size*vertex_size + 2*vertex_size)
+	{
+		Flux[el()] = vec4(0);
+	}
+}
+
+void add_water()
+{
+	float total_height = Heights[el()].x + Heights[el()].y;
+	//compute intersection of a ray from the centre of the camera with a parallel xz plane
+	vec2 intersection = vec2(camera_position.x + camera_direction.x * (total_height - camera_position.y)/ camera_direction.y, camera_position.z + camera_direction.z * (total_height - camera_position.y)/ camera_direction.y);
+	//out of bounds check 
+	if (intersection.x < -1 || intersection.x > 1 || intersection.y > 1 || intersection.y < -1) 
+		return;
+	float curr_distance = distance(intersection, coords());
+	//close enough
+	if (curr_distance < circ_dist)
+	{
+		//radius of add circle
+		int radius = grid_size / 32;
+		for (int i = int(x) - radius; i < int(x) + radius; i++)
+		{
+			for (int j = int(y) - radius; j < int(y) + radius; j++)
+			{
+				if (i < 1 || j < 1 || i >= grid_size - 1 || j >= grid_size - 1)
+					continue;
+				//add height to all elements in circle
+				float dist = distance(vec2(i,j), vec2(int(x),int(y)));
+				if (dist < radius)
+				{
+					Heights[el(i,j)].x += delta*0.01;
+				}
+			}
+		}
+	}
+}
+
 void main()
 {
-	float step_ = Additional[0].w;
+	if (x == 0 || x >= grid_size -1 || y == 0 || y >= grid_size - 1)
+			return;
+
+	vertex_size = 1/float(grid_size);
+	circ_dist = sqrt((1/float(grid_size))*(1/float(grid_size)) + (1/float(grid_size))*(1/float(grid_size)));
+
 	//this flows
 	vec4 current_flow = Flux[el()];
 	//adjacent flows
-	vec4 left_flow = (x > 0) ? Flux[el(x-1,y)] : vec4(0);
-	vec4 right_flow = (x < GRID_SIZE - 1) ? Flux[el(x+1,y)] : vec4(0);
-	vec4 top_flow = (y > 0) ? Flux[el(x,y-1)] : vec4(0);
-	vec4 bottom_flow = (y < GRID_SIZE - 1) ? Flux[el(x,y+1)] : vec4(0);
+	vec4 left_flow = (x > 1) ? Flux[el(x-1,y)] : vec4(0);
+	vec4 right_flow = (x < grid_size - 2) ? Flux[el(x+1,y)] : vec4(0);
+	vec4 top_flow = (y > 1) ? Flux[el(x,y-1)] : vec4(0);
+	vec4 bottom_flow = (y < grid_size - 2) ? Flux[el(x,y+1)] : vec4(0);
+
+	float oldHeight = Heights[el()].x;
 
 	//total outflow
 	float outflow = ((left_flow.y + right_flow.x + top_flow.w + bottom_flow.z) -
 							(current_flow.x + current_flow.y + current_flow.z + current_flow.w));
 
-	Heights[el()].x += step_ * outflow;
+	Heights[el()].x += delta * outflow;
+
+	if (mode == 0)
+	{
+		add_water();
+	}
+	else if (mode == 1)
+	{
+		rain();
+	}
+	else if (mode == 2)
+	{
+		waterfall();
+	}
+	else if (mode == 3)
+	{
+		add_pressure();
+	}
+	else if (mode == 4)
+	{
+		object();
+	}
 }

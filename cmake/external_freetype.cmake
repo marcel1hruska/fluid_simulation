@@ -18,13 +18,10 @@ elseif(WIN32)
 	GIT_TAG				5e7caec39a431b402c32667e615a83681a217263
 	CONFIGURE_COMMAND   ""
     BUILD_COMMAND       ""
-	INSTALL_COMMAND		""
+	INSTALL_COMMAND		${CMAKE_COMMAND} -E copy ${FREETYPE_PREFIX}/src/free_type/win32/freetype.dll ${CMAKE_BINARY_DIR}
 	)
-
 	set(FREETYPE_INCLUDE_DIRS ${FREETYPE_PREFIX}/src/free_type/include)
 	set(FREETYPE_LIBS ${FREETYPE_PREFIX}/src/free_type/win32)
-
-	file(COPY ${FREETYPE_PREFIX}/src/free_type/win32/freetype.dll DESTINATION ${CMAKE_BINARY_DIR})
 else()
 	message(FATAL_ERROR "FREETYPE required")
 endif()

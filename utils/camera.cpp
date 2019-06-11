@@ -2,13 +2,16 @@
 
 using namespace utils;
 
-void utils::camera::initialise(GLuint matrix_id, GLFWwindow * window, int height)
+void utils::camera::initialise(GLuint water_shader_id, GLuint terrain_shader_id, GLFWwindow * window, int height)
 {
 	window_ = window;
 	glfwSetCursorPos(window_, WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
 	last_x_ = x_ = WINDOW_WIDTH / 2;
 	last_y_ = y_ = WINDOW_HEIGHT / 2;
-	camera::matrix_id = matrix_id;
+	glUseProgram(terrain_shader_id);
+	terrain_matrix_id = glGetUniformLocation(terrain_shader_id, "transform_matrix");
+	glUseProgram(water_shader_id);
+	water_matrix_id = glGetUniformLocation(water_shader_id, "transform_matrix");
 	pos_ = glm::vec3(-1.0f, height + 3.0f, 3.0f);
 }
 

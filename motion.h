@@ -1,5 +1,5 @@
-﻿#ifndef SWE_H
-#define SWE_H
+﻿#ifndef MOTION_H
+#define MOTION_H
 
 #include <GL/glew.h>
 
@@ -12,10 +12,12 @@
 #include "utils/hud.h"
 #include "utils/perlin.h"
 
+//some default values
 #define WATER_HEIGHT 0.5
 #define TERRAIN_HEIGHT 0.5
 #define GRID_SIZE 1024
 #define PARTICLES GRID_SIZE*GRID_SIZE
+#define CUBE_SIZE GRID_SIZE/(float)32
 
 namespace simulation
 {
@@ -41,23 +43,29 @@ namespace simulation
 
 	struct add_info
 	{
-		glm::vec3 pos;
+		glm::vec4 camera_position;
+		glm::vec4 camera_direction;
+		glm::vec4 rand_pos;
+		int mode;
+		int grid_size;
+		int cube_size;
 		float delta;
 	};
 
 	/*
-		IMPORTANT
-		!!!
-		Currently implemented but not using
-		Simple pipeline model proved to be less time-consuming, more stable and provide sufficient visual results
-		To use the SWE, uncomment parts starting with SWE and comment out FLOW
-		!!!
+
+		Virtual pipe model proved to be less time-consuming, more stable than SWE and still provides sufficient visual results
 
 		Water Simulation, virtual pipe model:
+
+		Each cell in the grid represents a water column. These columns have their own heights and transfer water with their neighbours 
+		through virtual pipes that connect them, all based on hydrostatic laws.
 
 		2 passes (2 compute shaders)
 		1. compute outflows for each cell in grid
 		2. use these outflows to compute new water heights
+
+
 
 
 		NOT USED
@@ -87,6 +95,7 @@ namespace simulation
 	public:
 		motion() 
 		{ 
+			//create noise, time consuming
 			utils::perlin_noise p;
 			perlin_noise_ = new float[PARTICLES];
 			for (size_t y = 0; y < GRID_SIZE; y++)
@@ -99,28 +108,24 @@ namespace simulation
 			}
 		}
 		~motion() { delete[] perlin_noise_; }
-		GLuint initialize(utils::settings * s);
+		void initialize(utils::settings * s);
 		//recomputes heights + adds water if necessary
-		void recompute(glm::vec3 pos = glm::vec3(0,0,0), glm::vec3 dir = glm::vec3(0,0,0));
-		//returns heights
-		height * get_heights();
-		GLuint flux_id();
+		void recompute(glm::vec3 pos, glm::vec3 dir, bool mode_used);
+		//buffers ids
 		GLuint heights_id();
+		GLuint normals_id();
 		//destroy solver
 		void destroy();
 		void initialize_heights();
+		void compute_normals();
 	private:
-		GLuint compute_shader_id_, height_ssbo_id_, vel_ssbo_id_, flux_ssbo_id_, add_ssbo_id_, flow_shader_id_, update_shader_id_;
-		//keep heights and additional info buffers
-		height* heights_;
+		GLuint normals_shader_id_, height_ssbo_id_, normal_ssbo_id_, flux_ssbo_id_, add_ubo_id_, flow_shader_id_, update_shader_id_;
+		//additional info buffer
 		add_info * info_;
-		flux * fl_;
-		//time delta
-		double delta_;
-		glm::vec2 coords(int x, int y);
 		utils::settings * s_;
 		float * perlin_noise_;
+		glm::vec2 coords(int x, int y);
 	};
 }
 
-#endif SWE_H
+#endif MOTION_H
