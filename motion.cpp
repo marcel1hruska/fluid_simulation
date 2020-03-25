@@ -176,7 +176,7 @@ void simulation::motion::initialize_heights()
 				heights[x + y * GRID_SIZE].terrain = TERRAIN_HEIGHT * perlin_noise_[x + y * GRID_SIZE];
 				break;
 			case utils::terrain_mode::plain:
-				heights[x + y * GRID_SIZE].terrain = TERRAIN_HEIGHT;
+				heights[x + y * GRID_SIZE].terrain = TERRAIN_HEIGHT - 0.5;
 				break;
 			case utils::terrain_mode::crater:
 				auto dist = distance(current, vec2(0, 0));
